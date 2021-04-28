@@ -1,0 +1,72 @@
+---
+# tasks file for master
+   - name : docker installation
+     package :
+         name : docker
+         state : present
+   - name : docker service start
+     service :
+         name : docker
+         state : started
+         enabled : yes
+   - name : config repolist for kubernetes 
+     template :
+         dest : "/etc/yum.repos.d/kubernetes.repo"
+         src : kubernetes.repo 
+   - name : install kubeadm
+     shell :
+         cmd : yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+   - name : start kubelet service
+     service :
+         name : kubelet
+         state : started
+         enabled : yes
+   - name : pull images
+     shell :
+         cmd : kubeadm config images pull
+   - name : change driver
+     template :
+         dest : "/etc/docker/daemon.json"
+         src : daemon.json
+   - name : docker service restart
+     service :
+         name : docker
+         state : restarted
+   - name : install iproute-tc 
+     package : 
+         name : iproute-tc
+         state : present
+   - name : "k8s file config for iptables"
+     template :
+         src : k8s.conf
+         dest : /etc/sysctl.d/k8s.conf
+         # - name : "iptables set to 1"
+         # shell :
+         #      cmd : sysctl net.bridge.bridge-nf-call-iptables=1
+         # - name : "ip6tables set to 1"
+     #  shell : 
+     #         cmd : sysctl net.bridge.bridge-nf-call-ip6tables=1
+   - name : system reload
+     shell : 
+         cmd : sysctl --system
+   - name : master config 
+     shell : 
+         cmd : kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=NumCPU --ignore-preflight-errors=Mem
+     register : out1
+   - debug :
+         var : out1.rc
+   - name : token create
+     shell :
+         cmd : kubeadm token create --print-join-command
+     register : token
+   - name : token print
+     debug :
+         var : token
+   - name : configure kubectl in master
+     shell : "{{ item }}"
+     with_items :
+     - "mkdir -p $HOME/.kube"
+     - "cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+     - "chown $(id -u):$(id -g) $HOME/.kube/config"  
+
+
